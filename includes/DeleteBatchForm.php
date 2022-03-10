@@ -185,6 +185,7 @@ class DeleteBatchForm {
 
 		/* @todo run tests - run many tests */
 		$dbw = wfGetDB( DB_PRIMARY );
+
 		if ( $filename ) {
 			/* if from filename, delete from filename */
 			for ( $linenum = 1; !feof( $file ); $linenum++ ) {
@@ -246,6 +247,7 @@ class DeleteBatchForm {
 	 */
 	private function deletePage( $line, $user, $db, $reason = '', $multi = false, $linenum = 0 ) {
 		$page = Title::newFromText( $line );
+
 		if ( $page === null ) {
 			/* invalid title? */
 			$this->context->getOutput()->addWikiMsg(
@@ -287,7 +289,16 @@ class DeleteBatchForm {
 			}
 		}
 
-		$db->startAtomic( __METHOD__ );
+		$start_atomic = true;
+		if( version_compare( MW_VERSION, '1.26', '<=' ) ) {
+			// it seems MediaWiki 1.26 does not like to create transactions here
+			$start_atomic = false;
+		}
+
+		if( $start_atomic ) {
+			$db->startAtomic( __METHOD__ );
+		}
+
 		/* this stuff goes like articleFromTitle in Wiki.php */
 		// Delete the page; in the case of a file, this would be the File: description page
 		if ( $pageExists ) {
@@ -302,6 +313,7 @@ class DeleteBatchForm {
 				$wikipage->doDeleteArticleReal( $reason, $user );
 			}
 		}
+
 		// Delete the actual file, if applicable
 		if ( $localFileExists ) {
 			// This deletes all versions of the file. This does not create a
@@ -316,7 +328,11 @@ class DeleteBatchForm {
 				$localFile->delete( $reason );
 			}
 		}
-		$db->endAtomic( __METHOD__ );
+
+		if( $start_atomic ) {
+			$db->endAtomic( __METHOD__ );
+		}
+
 		if ( $localFileExists ) {
 			// Flush DBs in case of fragile file operations
 			$lbFactory = MediaWikiServices::getInstance()->getDBLoadBalancerFactory();
